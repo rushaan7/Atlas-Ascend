@@ -39,8 +39,8 @@ body::before {
   pointer-events: none;
   background-image: linear-gradient(hsl(var(--color-ink) / 0.03) 1px, transparent 1px),
     linear-gradient(90deg, hsl(var(--color-ink) / 0.03) 1px, transparent 1px);
-  background-size: 30px 30px;
-  mask-image: radial-gradient(circle at center, black 35%, transparent 100%);
+  background-size: 34px 34px;
+  opacity: 0.48;
   z-index: -1;
 }
 
@@ -80,7 +80,7 @@ body::before {
 
 @layer components {
   .surface-card {
-    @apply rounded-3xl border bg-surface/90 shadow-soft backdrop-blur;
+    @apply rounded-3xl border bg-surface/90 shadow-soft;
   }
 
   .field-label {
@@ -138,6 +138,11 @@ body::before {
 }
 
 @media (max-width: 768px) {
+  body::before {
+    opacity: 0.32;
+    background-size: 42px 42px;
+  }
+
   .fab-button {
     @apply px-3 py-2 text-[11px];
   }

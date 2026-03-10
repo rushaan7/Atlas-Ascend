@@ -37,11 +37,19 @@ export const MainMenuOverlay = () => {
   const history = useGameStore((state) => state.sessionHistory);
   const startGame = useGameStore((state) => state.startGame);
 
-  const totalCorrect = history.reduce((count, game) => count + game.completed.length, 0);
-  const totalSessions = history.length;
-  const bestMarathonScore = history
-    .filter((game) => game.mode === 'marathon')
-    .reduce((best, game) => (game.score > best ? game.score : best), 0);
+  const { totalCorrect, totalSessions, bestMarathonScore } = useMemo(() => {
+    const totalCorrect = history.reduce((count, game) => count + game.completed.length, 0);
+    const totalSessions = history.length;
+    const bestMarathonScore = history
+      .filter((game) => game.mode === 'marathon')
+      .reduce((best, game) => (game.score > best ? game.score : best), 0);
+
+    return {
+      totalCorrect,
+      totalSessions,
+      bestMarathonScore
+    };
+  }, [history]);
 
   const availableContinents = useMemo(
     () => (continents.length > 0 ? continents.filter((item) => item !== 'All') : DEFAULT_CONTINENTS),
@@ -74,10 +82,14 @@ export const MainMenuOverlay = () => {
     return null;
   }
 
+  const cardHover = { y: -3, scale: 1.01 };
+  const cardTap = { scale: 0.995 };
+  const cardTransition = { type: 'spring' as const, stiffness: 290, damping: 24, mass: 0.52 };
+
   return (
     <LazyMotion features={domAnimation}>
       <m.section
-        className="fixed inset-0 z-[820] flex items-center justify-center bg-background/88 p-4 backdrop-blur-sm"
+        className="fixed inset-0 z-[820] flex items-center justify-center bg-background/88 p-4 backdrop-blur-[2px]"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.24, ease: 'easeOut' }}
@@ -112,10 +124,13 @@ export const MainMenuOverlay = () => {
           </div>
 
           <div className="mt-5 grid gap-4 lg:grid-cols-2">
-            <button
+            <m.button
               type="button"
-              className="surface-card text-left transition hover:border-accent/40 hover:bg-accent/8"
+              className="surface-card text-left transition-[transform,border-color,background-color,box-shadow] duration-200 will-change-transform hover:border-accent/40 hover:bg-accent/8"
               onClick={() => startGame({ mode: 'marathon', region: 'All', order: 'random' })}
+              whileHover={cardHover}
+              whileTap={cardTap}
+              transition={cardTransition}
             >
               <div className="p-5">
                 <p className="text-xs uppercase tracking-[0.12em] text-accent">Marathon</p>
@@ -124,9 +139,13 @@ export const MainMenuOverlay = () => {
                   Full world run, persistent progress, score-focused.
                 </p>
               </div>
-            </button>
+            </m.button>
 
-            <div className="surface-card p-5">
+            <m.div
+              className="surface-card p-5 transition-[transform,border-color,background-color,box-shadow] duration-200 will-change-transform hover:border-danger/30 hover:bg-danger/5"
+              whileHover={cardHover}
+              transition={cardTransition}
+            >
               <p className="text-xs uppercase tracking-[0.12em] text-danger">Survival</p>
               <p className="mt-1 text-lg font-semibold text-ink">One-Chance Timed Mode</p>
               <p className="mt-1 text-sm text-muted">
@@ -135,7 +154,7 @@ export const MainMenuOverlay = () => {
               <p className="mt-2 text-[11px] text-muted">
                 Timer is auto-enabled. Choose a continent below.
               </p>
-            </div>
+            </m.div>
           </div>
 
           <div className="mt-5">
@@ -143,15 +162,15 @@ export const MainMenuOverlay = () => {
               Continent Learning (Top-to-Bottom Sequence)
             </p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {availableContinents.map((continent, index) => (
+              {availableContinents.map((continent) => (
                 <m.button
                   key={`learning-${continent}`}
                   type="button"
-                  className="rounded-2xl border border-ink/12 bg-background/70 p-3 text-left transition hover:border-accent/45 hover:bg-surface"
+                  className="rounded-2xl border border-ink/12 bg-background/70 p-3 text-left transition-[transform,border-color,background-color,box-shadow] duration-200 will-change-transform hover:border-accent/45 hover:bg-surface hover:shadow-soft"
                   onClick={() => startGame({ mode: 'continent', region: continent, order: 'sequential' })}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(index, 5) * 0.025, duration: 0.2 }}
+                  whileHover={cardHover}
+                  whileTap={cardTap}
+                  transition={cardTransition}
                 >
                   <p className="text-xs font-semibold text-accent">{CONTINENT_TAGS[continent] || 'GL'}</p>
                   <p className="mt-1 font-semibold text-ink">{formatRegionLabel(continent)}</p>
@@ -166,15 +185,15 @@ export const MainMenuOverlay = () => {
               Survival by Continent
             </p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {availableContinents.map((continent, index) => (
+              {availableContinents.map((continent) => (
                 <m.button
                   key={`survival-${continent}`}
                   type="button"
-                  className="rounded-2xl border border-danger/24 bg-danger/6 p-3 text-left transition hover:border-danger/55 hover:bg-danger/10"
+                  className="rounded-2xl border border-danger/24 bg-danger/6 p-3 text-left transition-[transform,border-color,background-color,box-shadow] duration-200 will-change-transform hover:border-danger/55 hover:bg-danger/10 hover:shadow-soft"
                   onClick={() => startGame({ mode: 'survival', region: continent, order: 'sequential' })}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(index, 5) * 0.03, duration: 0.2 }}
+                  whileHover={cardHover}
+                  whileTap={cardTap}
+                  transition={cardTransition}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-semibold text-ink">{formatRegionLabel(continent)}</p>
