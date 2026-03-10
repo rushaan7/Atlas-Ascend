@@ -34,9 +34,20 @@ export const GameHeader = ({
 }: GameHeaderProps) => (
   <header className="surface-card p-4 sm:p-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl">Atlas Ascend</h1>
-        <p className="mt-1 text-sm text-muted">Minimal, fast, and focused map guessing experience.</p>
+      <div className="flex items-center gap-3">
+        <img
+          src="/atlas-ascend-logo.svg"
+          alt="Atlas Ascend logo"
+          width={44}
+          height={44}
+          className="h-11 w-11 rounded-xl border border-accent/30 bg-background/75 p-1 shadow-soft"
+          loading="eager"
+          decoding="async"
+        />
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl">Atlas Ascend</h1>
+          <p className="mt-1 text-sm text-muted">Minimal, fast, and focused map guessing experience.</p>
+        </div>
       </div>
       <span className="rounded-full border border-accent/30 bg-accent/12 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-accent">
         Game Version 1.0
