@@ -24,18 +24,6 @@ const BASE_FILL_STYLE = {
   fillOpacity: 0.36
 } as const;
 
-const COMPLETE_FILL_STYLE = {
-  stroke: false,
-  fillColor: '#10b981',
-  fillOpacity: 0.62
-} as const;
-
-const MISSED_FILL_STYLE = {
-  stroke: false,
-  fillColor: '#ef4444',
-  fillOpacity: 0.62
-} as const;
-
 const TARGET_FILL_STYLE = {
   stroke: false,
   fillColor: '#f59e0b',
@@ -53,21 +41,21 @@ const BASE_OUTLINE_STYLE = {
 const COMPLETE_OUTLINE_STYLE = {
   color: '#22c55e',
   opacity: 1,
-  weight: 1.9,
+  weight: 2.25,
   fill: false
 } as const;
 
 const MISSED_OUTLINE_STYLE = {
   color: '#ef4444',
   opacity: 1,
-  weight: 1.9,
+  weight: 2.25,
   fill: false
 } as const;
 
 const TARGET_OUTLINE_STYLE = {
   color: '#fbbf24',
   opacity: 1,
-  weight: 2.1,
+  weight: 2.35,
   fill: false
 } as const;
 
@@ -283,14 +271,6 @@ export const MapPanel = ({
         />
 
         <GeoJSON data={baseCollection} style={() => BASE_FILL_STYLE} interactive={false} />
-
-        {missedCollection.features.length > 0 && (
-          <GeoJSON data={missedCollection} style={() => MISSED_FILL_STYLE} interactive={false} />
-        )}
-
-        {completedCollection.features.length > 0 && (
-          <GeoJSON data={completedCollection} style={() => COMPLETE_FILL_STYLE} interactive={false} />
-        )}
 
         {targetPolygon && (
           <GeoJSON key={`target-fill-${targetCountry?.id}`} data={targetPolygon} style={() => TARGET_FILL_STYLE} interactive={false} />

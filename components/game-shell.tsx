@@ -121,6 +121,7 @@ export const GameShell = () => {
   const isSurvival = mode === 'survival';
   const sessionInProgress = !!session && session.remaining.length > 0;
   const showOutcomeLabels = !!session && !sessionInProgress;
+  const showHomeOverlay = !session;
 
   return (
     <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 pb-24 pt-4 sm:px-6 lg:px-8">
@@ -148,13 +149,22 @@ export const GameShell = () => {
 
       <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         <div className={isBooting ? 'opacity-60' : 'opacity-100 transition-opacity'}>
-          <MapPanel
-            countries={countries}
-            completedIds={session?.completed ?? []}
-            missedIds={session?.missed ?? []}
-            targetCountry={targetCountry}
-            showOutcomeLabels={showOutcomeLabels}
-          />
+          {showHomeOverlay ? (
+            <section className="surface-card h-[460px] p-3 sm:h-[560px]" aria-label="Map preview">
+              <div className="relative h-full overflow-hidden rounded-2xl border border-ink/12 bg-background/65">
+                <div className="absolute inset-0 bg-[radial-gradient(520px_320px_at_18%_18%,rgba(56,189,248,0.12),transparent_60%),radial-gradient(460px_300px_at_85%_12%,rgba(251,191,36,0.12),transparent_58%),radial-gradient(520px_380px_at_50%_100%,rgba(16,185,129,0.09),transparent_64%)]" />
+                <div className="absolute inset-0 opacity-55 [background-size:34px_34px] [background-image:linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)]" />
+              </div>
+            </section>
+          ) : (
+            <MapPanel
+              countries={countries}
+              completedIds={session?.completed ?? []}
+              missedIds={session?.missed ?? []}
+              targetCountry={targetCountry}
+              showOutcomeLabels={showOutcomeLabels}
+            />
+          )}
         </div>
 
         <aside className="grid content-start gap-4">
