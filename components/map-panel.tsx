@@ -1,8 +1,8 @@
 'use client';
 
-import type { Feature, FeatureCollection, Geometry, GeoJsonProperties } from 'geojson';
+import type { Feature, FeatureCollection, Geometry } from 'geojson';
 import L from 'leaflet';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { CircleMarker, GeoJSON, MapContainer, TileLayer, Tooltip, useMap } from 'react-leaflet';
 
 import type { Country } from '@/lib/types';
@@ -18,16 +18,80 @@ interface MapPanelProps {
 
 const WORLD_CENTER: [number, number] = [20, 10];
 
+const BASE_FILL_STYLE = {
+  stroke: false,
+  fillColor: '#1f2937',
+  fillOpacity: 0.36
+} as const;
+
+const COMPLETE_FILL_STYLE = {
+  stroke: false,
+  fillColor: '#10b981',
+  fillOpacity: 0.62
+} as const;
+
+const MISSED_FILL_STYLE = {
+  stroke: false,
+  fillColor: '#ef4444',
+  fillOpacity: 0.62
+} as const;
+
+const TARGET_FILL_STYLE = {
+  stroke: false,
+  fillColor: '#f59e0b',
+  fillOpacity: 0.62,
+  className: 'leaflet-target-fill'
+} as const;
+
+const BASE_OUTLINE_STYLE = {
+  color: '#6b7280',
+  opacity: 0.9,
+  weight: 0.72,
+  fill: false
+} as const;
+
+const COMPLETE_OUTLINE_STYLE = {
+  color: '#22c55e',
+  opacity: 1,
+  weight: 1.9,
+  fill: false
+} as const;
+
+const MISSED_OUTLINE_STYLE = {
+  color: '#ef4444',
+  opacity: 1,
+  weight: 1.9,
+  fill: false
+} as const;
+
+const TARGET_OUTLINE_STYLE = {
+  color: '#fbbf24',
+  opacity: 1,
+  weight: 2.1,
+  fill: false
+} as const;
+
 const polygonGeometry = (geometry: Geometry): boolean =>
   geometry.type === 'Polygon' || geometry.type === 'MultiPolygon';
 
+const toFeatureCollection = (features: Array<Feature<Geometry>>): FeatureCollection<Geometry> => ({
+  type: 'FeatureCollection',
+  features
+});
+
 const FlyToTarget = ({ targetCountry }: { targetCountry: Country | undefined }) => {
   const map = useMap();
+  const lastTargetIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!targetCountry) {
       return;
     }
+
+    if (lastTargetIdRef.current === targetCountry.id) {
+      return;
+    }
+    lastTargetIdRef.current = targetCountry.id;
 
     if (polygonGeometry(targetCountry.coordinates.geometry)) {
       const layer = L.geoJSON(targetCountry.coordinates as Feature<Geometry>);
@@ -37,25 +101,34 @@ const FlyToTarget = ({ targetCountry }: { targetCountry: Country | undefined }) 
         const latSpan = Math.abs(bounds.getNorth() - bounds.getSouth());
         const lngSpan = Math.abs(bounds.getEast() - bounds.getWest());
         const largestSpan = Math.max(latSpan, lngSpan);
-        const pad =
-          largestSpan < 1 ? 0.16 : largestSpan < 4 ? 0.22 : largestSpan < 12 ? 0.3 : 0.38;
+        const pad = largestSpan < 1 ? 0.15 : largestSpan < 4 ? 0.22 : largestSpan < 12 ? 0.3 : 0.36;
 
         const paddedBounds = bounds.pad(pad);
-        const fitZoom = map.getBoundsZoom(paddedBounds, false, L.point(36, 36));
-        const targetZoom = Math.max(2.6, Math.min(6.35, fitZoom));
+        const fitZoom = map.getBoundsZoom(paddedBounds, false, L.point(28, 28));
+        const targetZoom = Math.max(2.8, Math.min(6.5, fitZoom));
         const targetCenter = paddedBounds.getCenter();
         const currentCenter = map.getCenter();
+        const distance = currentCenter.distanceTo(targetCenter);
+        const zoomDiff = Math.abs(map.getZoom() - targetZoom);
 
-        // Ignore tiny moves to prevent camera jitter between near-identical targets.
-        if (currentCenter.distanceTo(targetCenter) < 7000 && Math.abs(map.getZoom() - targetZoom) < 0.14) {
+        map.stop();
+
+        if (distance < 180000 && zoomDiff < 0.55) {
+          map.panTo(targetCenter, {
+            animate: true,
+            duration: 0.45,
+            easeLinearity: 0.22
+          });
+          if (zoomDiff > 0.2) {
+            map.setZoom(targetZoom, { animate: true });
+          }
           return;
         }
 
-        map.stop();
         map.flyTo(targetCenter, targetZoom, {
           animate: true,
-          duration: 0.82,
-          easeLinearity: 0.24,
+          duration: 0.72,
+          easeLinearity: 0.22,
           noMoveStart: true
         });
         return;
@@ -63,10 +136,10 @@ const FlyToTarget = ({ targetCountry }: { targetCountry: Country | undefined }) 
     }
 
     map.stop();
-    map.flyTo(targetCountry.centroid, 5, {
+    map.flyTo(targetCountry.centroid, 5.2, {
       animate: true,
-      duration: 0.8,
-      easeLinearity: 0.24,
+      duration: 0.68,
+      easeLinearity: 0.22,
       noMoveStart: true
     });
   }, [map, targetCountry]);
@@ -94,57 +167,54 @@ export const MapPanel = ({
   const completeSet = useMemo(() => new Set(completedIds), [completedIds]);
   const missedSet = useMemo(() => new Set(missedIds), [missedIds]);
 
-  const collection = useMemo<FeatureCollection<Geometry>>(
-    () => ({
-      type: 'FeatureCollection',
-      features: countries
-        .filter((country) => polygonGeometry(country.coordinates.geometry))
-        .map((country) => ({
+  const { baseCollection, polygonById, pointCountries } = useMemo(() => {
+    const polygonFeatures: Array<Feature<Geometry>> = [];
+    const idToFeature = new Map<string, Feature<Geometry>>();
+    const points: Country[] = [];
+
+    for (const country of countries) {
+      if (polygonGeometry(country.coordinates.geometry)) {
+        const feature = {
           ...country.coordinates,
           properties: {
             ...(country.coordinates.properties || {}),
             id: country.id,
             name: formatCountryName(country.name)
           }
-        }))
-    }),
-    [countries]
+        } as Feature<Geometry>;
+
+        polygonFeatures.push(feature);
+        idToFeature.set(country.id, feature);
+      } else {
+        points.push(country);
+      }
+    }
+
+    return {
+      baseCollection: toFeatureCollection(polygonFeatures),
+      polygonById: idToFeature,
+      pointCountries: points
+    };
+  }, [countries]);
+
+  const completedCollection = useMemo(
+    () =>
+      toFeatureCollection(
+        completedIds
+          .map((id) => polygonById.get(id))
+          .filter((feature): feature is Feature<Geometry> => !!feature)
+      ),
+    [completedIds, polygonById]
   );
 
-  const completedCollection = useMemo<FeatureCollection<Geometry>>(
-    () => ({
-      type: 'FeatureCollection',
-      features: countries
-        .filter(
-          (country) => polygonGeometry(country.coordinates.geometry) && completeSet.has(country.id)
-        )
-        .map((country) => ({
-          ...country.coordinates,
-          properties: {
-            ...(country.coordinates.properties || {}),
-            id: country.id,
-            name: formatCountryName(country.name)
-          }
-        }))
-    }),
-    [completeSet, countries]
-  );
-
-  const missedCollection = useMemo<FeatureCollection<Geometry>>(
-    () => ({
-      type: 'FeatureCollection',
-      features: countries
-        .filter((country) => polygonGeometry(country.coordinates.geometry) && missedSet.has(country.id))
-        .map((country) => ({
-          ...country.coordinates,
-          properties: {
-            ...(country.coordinates.properties || {}),
-            id: country.id,
-            name: formatCountryName(country.name)
-          }
-        }))
-    }),
-    [countries, missedSet]
+  const missedCollection = useMemo(
+    () =>
+      toFeatureCollection(
+        missedIds
+          .map((id) => polygonById.get(id))
+          .filter((feature): feature is Feature<Geometry> => !!feature)
+      ),
+    [missedIds, polygonById]
   );
 
   const targetPolygon = useMemo<Feature<Geometry> | null>(() => {
@@ -152,8 +222,18 @@ export const MapPanel = ({
       return null;
     }
 
-    return targetCountry.coordinates as Feature<Geometry>;
-  }, [targetCountry]);
+    return (
+      polygonById.get(targetCountry.id) ||
+      ({
+        ...targetCountry.coordinates,
+        properties: {
+          ...(targetCountry.coordinates.properties || {}),
+          id: targetCountry.id,
+          name: formatCountryName(targetCountry.name)
+        }
+      } as Feature<Geometry>)
+    );
+  }, [polygonById, targetCountry]);
 
   const targetPoint = useMemo<[number, number] | null>(() => {
     if (!targetCountry || polygonGeometry(targetCountry.coordinates.geometry)) {
@@ -164,15 +244,8 @@ export const MapPanel = ({
   }, [targetCountry]);
 
   const outcomePointCountries = useMemo(
-    () =>
-      countries.filter((country) => {
-        if (polygonGeometry(country.coordinates.geometry)) {
-          return false;
-        }
-
-        return completeSet.has(country.id) || missedSet.has(country.id);
-      }),
-    [completeSet, countries, missedSet]
+    () => pointCountries.filter((country) => completeSet.has(country.id) || missedSet.has(country.id)),
+    [completeSet, missedSet, pointCountries]
   );
 
   const outcomeLabelCountries = useMemo(
@@ -183,77 +256,6 @@ export const MapPanel = ({
           (completeSet.has(country.id) || missedSet.has(country.id))
       ),
     [completeSet, countries, missedSet]
-  );
-
-  const regionFillStyle = useCallback(
-    () => ({
-      stroke: false,
-      fillColor: '#1f2937',
-      fillOpacity: 0.36
-    }),
-    []
-  );
-
-  const completeFillStyle = useCallback(
-    () => ({
-      stroke: false,
-      fillColor: '#10b981',
-      fillOpacity: 0.62
-    }),
-    []
-  );
-
-  const missedFillStyle = useCallback(
-    () => ({
-      stroke: false,
-      fillColor: '#ef4444',
-      fillOpacity: 0.62
-    }),
-    []
-  );
-
-  const regionOutlineStyle = useCallback(
-    (feature?: Feature<Geometry, GeoJsonProperties>) => {
-      const id = feature?.properties?.id as string | undefined;
-      const isCurrent = id === targetCountry?.id;
-      const isMissed = !!id && missedSet.has(id);
-      const isComplete = !!id && completeSet.has(id);
-
-      if (isCurrent) {
-        return {
-          color: '#fbbf24',
-          opacity: 1,
-          weight: 2,
-          fill: false
-        };
-      }
-
-      if (isMissed) {
-        return {
-          color: '#ef4444',
-          opacity: 1,
-          weight: 1.85,
-          fill: false
-        };
-      }
-
-      if (isComplete) {
-        return {
-          color: '#22c55e',
-          opacity: 1,
-          weight: 1.85,
-          fill: false
-        };
-      }
-
-      return {
-        color: '#6b7280',
-        opacity: 0.9,
-        weight: 0.72,
-        fill: false
-      };
-    },
-    [completeSet, missedSet, targetCountry?.id]
   );
 
   return (
@@ -275,25 +277,40 @@ export const MapPanel = ({
         <TileLayer
           url="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          keepBuffer={3}
+          keepBuffer={4}
           updateWhenZooming={false}
           updateWhenIdle
         />
 
-        <GeoJSON data={collection} style={regionFillStyle} interactive={false} />
-        <GeoJSON data={missedCollection} style={missedFillStyle} interactive={false} />
-        <GeoJSON data={completedCollection} style={completeFillStyle} interactive={false} />
+        <GeoJSON data={baseCollection} style={() => BASE_FILL_STYLE} interactive={false} />
+
+        {missedCollection.features.length > 0 && (
+          <GeoJSON data={missedCollection} style={() => MISSED_FILL_STYLE} interactive={false} />
+        )}
+
+        {completedCollection.features.length > 0 && (
+          <GeoJSON data={completedCollection} style={() => COMPLETE_FILL_STYLE} interactive={false} />
+        )}
+
+        {targetPolygon && (
+          <GeoJSON key={`target-fill-${targetCountry?.id}`} data={targetPolygon} style={() => TARGET_FILL_STYLE} interactive={false} />
+        )}
+
+        <GeoJSON data={baseCollection} style={() => BASE_OUTLINE_STYLE} interactive={false} />
+
+        {missedCollection.features.length > 0 && (
+          <GeoJSON data={missedCollection} style={() => MISSED_OUTLINE_STYLE} interactive={false} />
+        )}
+
+        {completedCollection.features.length > 0 && (
+          <GeoJSON data={completedCollection} style={() => COMPLETE_OUTLINE_STYLE} interactive={false} />
+        )}
 
         {targetPolygon && (
           <GeoJSON
-            key={`target-${targetCountry?.id}`}
+            key={`target-outline-${targetCountry?.id}`}
             data={targetPolygon}
-            style={() => ({
-              stroke: false,
-              fillColor: '#f59e0b',
-              fillOpacity: 0.62,
-              className: 'leaflet-target-fill'
-            })}
+            style={() => TARGET_OUTLINE_STYLE}
             interactive={false}
           />
         )}
@@ -315,35 +332,35 @@ export const MapPanel = ({
         )}
 
         {outcomePointCountries.map((country) => {
-            const isMissed = missedSet.has(country.id);
-            const color = isMissed ? '#ef4444' : '#10b981';
+          const isMissed = missedSet.has(country.id);
+          const color = isMissed ? '#ef4444' : '#10b981';
 
-            return (
-              <CircleMarker
-                key={`outcome-point-${country.id}`}
-                center={country.centroid}
-                radius={6.5}
-                pathOptions={{
-                  color,
-                  fillColor: color,
-                  fillOpacity: 0.75,
-                  weight: 2
-                }}
-                interactive={false}
-              >
-                {showOutcomeLabels && (
-                  <Tooltip
-                    permanent
-                    direction="top"
-                    opacity={0.96}
-                    className={isMissed ? 'leaflet-tooltip-missed' : 'leaflet-tooltip-correct'}
-                  >
-                    {formatCountryName(country.name)}
-                  </Tooltip>
-                )}
-              </CircleMarker>
-            );
-          })}
+          return (
+            <CircleMarker
+              key={`outcome-point-${country.id}`}
+              center={country.centroid}
+              radius={6.5}
+              pathOptions={{
+                color,
+                fillColor: color,
+                fillOpacity: 0.76,
+                weight: 2
+              }}
+              interactive={false}
+            >
+              {showOutcomeLabels && (
+                <Tooltip
+                  permanent
+                  direction="top"
+                  opacity={0.96}
+                  className={isMissed ? 'leaflet-tooltip-missed' : 'leaflet-tooltip-correct'}
+                >
+                  {formatCountryName(country.name)}
+                </Tooltip>
+              )}
+            </CircleMarker>
+          );
+        })}
 
         {showOutcomeLabels &&
           outcomeLabelCountries.map((country) => {
@@ -370,8 +387,6 @@ export const MapPanel = ({
               </CircleMarker>
             );
           })}
-
-        <GeoJSON data={collection} style={regionOutlineStyle} />
 
         <FlyToTarget targetCountry={targetCountry} />
         <AttributionControl />
